@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
       activitiesList.innerHTML = "";
 
       // Populate activities list
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
         activityCard.className = "activity-card";
@@ -24,10 +25,10 @@ document.addEventListener("DOMContentLoaded", () => {
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
-          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <p><strong>Availability:</strong> <span class="availability-count">${spotsLeft}</span> spots left</p>
         `;
 
-        // Participants section (bulleted list)
+        // Participants section (unstyled list with delete buttons)
         const participantsTitle = document.createElement('p');
         participantsTitle.className = 'participants-title';
         participantsTitle.textContent = 'Participants:';
@@ -40,7 +41,21 @@ document.addEventListener("DOMContentLoaded", () => {
           details.participants.forEach(participant => {
             const li = document.createElement('li');
             li.className = 'participant-item';
-            li.textContent = participant;
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'participant-name';
+            nameSpan.textContent = participant;
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'delete-participant';
+            delBtn.setAttribute('aria-label', `Remove ${participant}`);
+            delBtn.dataset.activity = name;
+            delBtn.dataset.email = participant;
+            delBtn.textContent = '✖';
+
+            li.appendChild(nameSpan);
+            li.appendChild(delBtn);
+
             participantsListEl.appendChild(li);
           });
         } else {
@@ -53,6 +68,44 @@ document.addEventListener("DOMContentLoaded", () => {
         activityCard.appendChild(participantsListEl);
 
         activitiesList.appendChild(activityCard);
+
+        // Attach delete handler (event delegation)
+        participantsListEl.addEventListener('click', async (e) => {
+          if (!e.target.classList.contains('delete-participant')) return;
+
+          const activityName = e.target.dataset.activity;
+          const email = e.target.dataset.email;
+
+          try {
+            const resp = await fetch(`/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(email)}`, {
+              method: 'DELETE',
+            });
+
+            const resJson = await resp.json();
+
+            if (resp.ok) {
+              // Refresh activities to keep UI in sync
+              fetchActivities();
+
+              // show a short info message
+              messageDiv.textContent = resJson.message || 'Removed participant';
+              messageDiv.className = 'info';
+              messageDiv.classList.remove('hidden');
+              setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+            } else {
+              messageDiv.textContent = resJson.detail || 'Failed to remove participant';
+              messageDiv.className = 'error';
+              messageDiv.classList.remove('hidden');
+              setTimeout(() => messageDiv.classList.add('hidden'), 5000);
+            }
+          } catch (err) {
+            console.error('Error removing participant:', err);
+            messageDiv.textContent = 'Failed to remove participant. Try again.';
+            messageDiv.className = 'error';
+            messageDiv.classList.remove('hidden');
+            setTimeout(() => messageDiv.classList.add('hidden'), 5000);
+          }
+        });
 
         // Add option to select dropdown
         const option = document.createElement("option");
@@ -87,6 +140,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities to show new participant immediately
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
